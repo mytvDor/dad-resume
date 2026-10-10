@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState } from "react";
 import { jsPDF } from "jspdf";
 
@@ -286,9 +287,9 @@ function generatePdf(form, options) {
   }
 
   const safeBankName = (form.bankName || "Bank").replace(/[^a-z0-9-_]+/gi, "_");
-  doc.save(
-    `Application_${safeBankName}_${formatDate(form.applicationDate).replaceAll("/", "-")}.pdf`,
-  );
+  const fileName = `Application_${safeBankName}_${formatDate(form.applicationDate).replaceAll("/", "-")}.pdf`;
+  const blob = doc.output("blob");
+  return { blob, fileName };
 }
 
 export default function ApplicationGenerator() {
@@ -301,8 +302,7 @@ export default function ApplicationGenerator() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleSubmit(event) {
-    event.preventDefault();
+  function validateForm() {
     if (
       !form.bankName.trim() ||
       !form.bankAddress.trim() ||
@@ -312,10 +312,66 @@ export default function ApplicationGenerator() {
       setError(
         "Please fill in the bank name, bank address, officer designation, and post name.",
       );
-      return;
+      return false;
     }
     setError("");
-    generatePdf(form, { includeExperience, includePersonal });
+    return true;
+  }
+
+  function downloadPdf(pdf) {
+    const url = URL.createObjectURL(pdf.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = pdf.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    if (!validateForm()) return;
+    downloadPdf(generatePdf(form, { includeExperience, includePersonal }));
+  }
+
+  async function handleShareWhatsApp() {
+    if (!validateForm()) return;
+
+    const pdf = generatePdf(form, { includeExperience, includePersonal });
+    const message = `Application PDF for ${form.bankName}.`;
+    const pdfFile = new File([pdf.blob], pdf.fileName, {
+      type: "application/pdf",
+    });
+
+    // Supported phones/browsers can share the actual PDF file through the native share menu.
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [pdfFile] })
+    ) {
+      try {
+        await navigator.share({
+          files: [pdfFile],
+          title: "Bank Job Application",
+          text: message,
+        });
+        return;
+      } catch (shareError) {
+        if (shareError?.name === "AbortError") return;
+      }
+    }
+
+    // Fallback: WhatsApp Web cannot attach a local PDF through a URL.
+    downloadPdf(pdf);
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    window.alert(
+      "This browser cannot attach the PDF automatically. The PDF has been downloaded and WhatsApp opened. In WhatsApp, attach the downloaded PDF using + / paperclip → Document.",
+    );
   }
 
   const inputClass =
@@ -428,24 +484,39 @@ export default function ApplicationGenerator() {
             </p>
           )}
 
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-5 w-5 fill-none stroke-current"
-              strokeWidth="1.8"
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <button
+              type="submit"
+              className="flex min-w-0 w-full items-center justify-center gap-1 rounded-lg bg-blue-700 px-2 py-3 text-xs font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:gap-2 sm:px-4 sm:text-sm"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"
-              />
-            </svg>
-            Generate &amp; Download PDF
-          </button>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4 shrink-0 fill-none stroke-current sm:h-5 sm:w-5"
+                strokeWidth="1.8"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"
+                />
+              </svg>
+              <span>Generate PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className="flex min-w-0 w-full items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-3 text-xs font-semibold text-white transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 sm:gap-2 sm:px-4 sm:text-sm"
+            >
+              <span>Share on WhatsApp</span>
+            </button>
+          </div>
+
+          <p className="text-center text-xs text-gray-500">
+            PDF is generated in your browser. No database or server upload is
+            used.
+          </p>
         </form>
       </div>
     </main>

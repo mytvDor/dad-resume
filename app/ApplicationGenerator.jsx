@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState } from "react";
 import { jsPDF } from "jspdf";
 
@@ -287,9 +286,9 @@ function generatePdf(form, options) {
   }
 
   const safeBankName = (form.bankName || "Bank").replace(/[^a-z0-9-_]+/gi, "_");
-  const fileName = `Application_${safeBankName}_${formatDate(form.applicationDate).replaceAll("/", "-")}.pdf`;
-  const blob = doc.output("blob");
-  return { blob, fileName };
+  doc.save(
+    `Application_${safeBankName}_${formatDate(form.applicationDate).replaceAll("/", "-")}.pdf`,
+  );
 }
 
 export default function ApplicationGenerator() {
@@ -302,7 +301,8 @@ export default function ApplicationGenerator() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function validateForm() {
+  function handleSubmit(event) {
+    event.preventDefault();
     if (
       !form.bankName.trim() ||
       !form.bankAddress.trim() ||
@@ -312,33 +312,10 @@ export default function ApplicationGenerator() {
       setError(
         "Please fill in the bank name, bank address, officer designation, and post name.",
       );
-      return false;
+      return;
     }
     setError("");
-    return true;
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    if (!validateForm()) return;
-
-    const pdf = generatePdf(form, { includeExperience, includePersonal });
-
-    // Download the generated PDF.
-    const url = URL.createObjectURL(pdf.blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = pdf.fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    // Open WhatsApp with a message that includes the entered bank name.
-    // WhatsApp's web link cannot attach a local PDF automatically.
-    const message = `Application PDF for ${form.bankName} is ready.`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    generatePdf(form, { includeExperience, includePersonal });
   }
 
   const inputClass =
@@ -469,11 +446,6 @@ export default function ApplicationGenerator() {
             </svg>
             Generate &amp; Download PDF
           </button>
-
-          <p className="text-center text-xs text-gray-500">
-            PDF is generated in your browser. No database or server upload is
-            used.
-          </p>
         </form>
       </div>
     </main>
